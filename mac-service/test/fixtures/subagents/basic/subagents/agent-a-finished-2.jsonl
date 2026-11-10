@@ -1,0 +1,2 @@
+{"isSidechain": true, "type": "user", "message": {"role": "user", "content": "Find hub.js"}, "timestamp": "2026-11-02T10:01:00.000Z"}
+{"isSidechain": true, "type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "It is in src/hub.js."}]}, "timestamp": "2026-11-02T10:01:04.000Z"}

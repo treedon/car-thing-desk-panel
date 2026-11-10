@@ -1,0 +1,12 @@
+[Unit]
+Description=Desk panel web server and microphone recorder
+After=local-fs.target sound.target
+Before=chromium-kiosk.service
+
+[Service]
+ExecStart=/usr/bin/panel-recorder
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

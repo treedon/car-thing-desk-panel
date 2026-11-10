@@ -1,0 +1,159 @@
+// WS hub at /ws. Clients: emulator relay, Swift connector relay, webpage.
+// First frame must be bridge.hello {role}. Responses go ONLY to the requesting
+// socket (avoids request-id collisions between relays); events broadcast to all.
+
+import { WebSocketServer } from 'ws';
+import { DAEMON_VERSION } from './config.js';
+import { log } from './log.js';
+
+// Roles that are a screen able to answer asks. 'emulator' is upstream's name
+// for the same thing.
+const PANEL_ROLES = ['panel', 'emulator'];
+
+// A panel that drops off Wi-Fi (or a Mac that sleeps) sends no FIN, and the
+// socket would look open for minutes, holding permissions and questions for a
+// screen that is gone. Protocol pings every HEARTBEAT_MS; a socket that misses
+// MAX_MISSED pongs is terminated, which releases its holds through onClose.
+// Browsers answer pings on their own.
+const HEARTBEAT_MS = 1000;
+const MAX_MISSED = 2;
+
+export function createHub({ onHello, onClose, heartbeatMs = HEARTBEAT_MS } = {}) {
+  const wss = new WebSocketServer({ noServer: true });
+  const clients = new Map(); // socket -> {role, info, connectedAt}
+  let methods = {};          // method -> async handler(params, ctx)
+  let connectorStatus = null; // last bridge.status from a connector
+
+  // A relay on a slow link (bluetooth to the device) that stops draining
+  // must not buffer an unbounded backlog of state frames it will replay in
+  // slow motion once it catches up. Session snapshots and details supersede
+  // each other, so for a backed-up socket the newest one later is strictly
+  // better than every stale one now. Asks and their resolutions are NOT
+  // superseding — those always go out.
+  const MAX_BUFFERED_STATE_BYTES = 64 * 1024;
+  const SUPERSEDING = /^claude\.(sessions?|usage|digest)\./;
+
+  function emit(topic, data) {
+    const frame = JSON.stringify({
+      type: 'event', topic, data, server_timestamp_ms: Date.now(),
+    });
+    const droppable = SUPERSEDING.test(topic);
+    for (const [socket, meta] of clients.entries()) {
+      if (socket.readyState !== socket.OPEN) continue;
+      if (droppable && socket.bufferedAmount > MAX_BUFFERED_STATE_BYTES) continue;
+      // Detail events are per-session and mostly noise to a screen showing one
+      // session: a socket that declared a watch gets only its watched id (null
+      // = none at all). Sockets that never sent claude.session.watch — the
+      // webpage, old firmware — get every detail, as before. Only details are
+      // ever filtered; snapshots, asks and resolutions always broadcast.
+      if (topic === 'claude.session.update' && meta.watchSet && (data && data.id) !== meta.watch) continue;
+      socket.send(frame);
+    }
+    // Session snapshots fire constantly and would drown the log — but they are
+    // also the one event class you need when tiles misbehave, so the flag
+    // un-silences them.
+    if (!topic.startsWith('claude.sessions.') || process.env.CLAUDE_THING_DEBUG_EVENTS === '1') log('EV', topic);
+  }
+
+  function rolesOnline() {
+    const roles = {};
+    for (const meta of clients.values()) {
+      roles[meta.role] = (roles[meta.role] || 0) + 1;
+    }
+    return roles;
+  }
+
+  function panelOnline() {
+    const roles = rolesOnline();
+    return PANEL_ROLES.some((r) => roles[r] > 0);
+  }
+
+  function sweep() {
+    for (const [socket, meta] of clients.entries()) {
+      if (meta.missed >= MAX_MISSED) {
+        log('--', `client unresponsive, dropping: ${meta.role}`);
+        try { socket.terminate(); } catch {}
+        continue;
+      }
+      meta.missed = (meta.missed || 0) + 1;
+      try { socket.ping(); } catch {}
+    }
+  }
+  if (heartbeatMs > 0) setInterval(sweep, heartbeatMs).unref();
+
+  wss.on('connection', (socket) => {
+    clients.set(socket, { role: 'unknown', info: {}, connectedAt: Date.now(), missed: 0 });
+    socket.on('pong', () => { const m = clients.get(socket); if (m) m.missed = 0; });
+
+    socket.on('message', async (raw) => {
+      let msg;
+      try { msg = JSON.parse(raw.toString('utf8')); } catch { return; }
+      if (msg.type !== 'request' || typeof msg.method !== 'string') return;
+
+      const meta = clients.get(socket);
+      const respond = (frame) => {
+        if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(frame));
+      };
+
+      if (msg.method === 'bridge.hello') {
+        meta.role = (msg.params && msg.params.role) || 'unknown';
+        meta.info = (msg.params && msg.params.info) || {};
+        log('--', `client hello: ${meta.role}`);
+        emit('bridge.clients', rolesOnline());
+        respond({ type: 'response', id: msg.id, result: { ok: true, daemonVersion: DAEMON_VERSION } });
+        // A client arriving is the only moment a restarted daemon can correct
+        // whatever a screen has been showing since the old one died. The device
+        // cannot ask on its own: on real hardware its socket is to the
+        // connector, which never noticed the daemon go.
+        if (onHello) onHello(meta.role);
+        return;
+      }
+      if (msg.method === 'bridge.status') {
+        connectorStatus = { ...(msg.params || {}), updatedTs: Date.now() };
+        emit('bridge.connector', connectorStatus);
+        return respond({ type: 'response', id: msg.id, result: { ok: true } });
+      }
+      // claude.-prefixed because the relays forward only that prefix, yet
+      // handled here rather than via setMethods: it mutates per-socket state,
+      // which registered handlers never see. Watch dies with the socket, so a
+      // restarted daemon reverts to broadcast-all — today's behavior — until
+      // the client re-asserts.
+      if (msg.method === 'claude.session.watch') {
+        meta.watch = (msg.params && msg.params.id) || null;
+        meta.watchSet = true;
+        return respond({ type: 'response', id: msg.id, result: { ok: true } });
+      }
+
+      const handler = methods[msg.method];
+      if (!handler) {
+        return respond({ type: 'error', id: msg.id, error: 'Unknown method' });
+      }
+      try {
+        const result = await handler(msg.params || {}, { role: meta.role });
+        respond({ type: 'response', id: msg.id, result });
+      } catch (err) {
+        respond({ type: 'error', id: msg.id, error: String(err.message || err) });
+      }
+      if (msg.method !== 'claude.sessions.list') log('RQ', `${meta.role} ${msg.method}`);
+    });
+
+    socket.on('close', () => {
+      const meta = clients.get(socket);
+      clients.delete(socket);
+      log('--', `client gone: ${meta ? meta.role : '?'}`);
+      emit('bridge.clients', rolesOnline());
+      if (onClose) onClose(rolesOnline());
+    });
+    socket.on('error', () => {});
+  });
+
+  return {
+    wss,
+    emit,
+    rolesOnline,
+    panelOnline,
+    sweep,
+    connectorStatus: () => connectorStatus,
+    setMethods: (m) => { methods = m; },
+  };
+}

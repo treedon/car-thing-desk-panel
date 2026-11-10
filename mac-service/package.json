@@ -1,0 +1,21 @@
+{
+  "name": "claude-panel-mac-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mac service for the Car Thing desk panel: Claude Code sessions, hooks, and the panel WebSocket",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "install-hooks": "node scripts/install-hooks.js",
+    "uninstall-hooks": "node scripts/uninstall-hooks.js",
+    "smoke": "node scripts/smoke-hub.js",
+    "hook-latency": "node scripts/hook-latency.js",
+    "test": "CLAUDE_THING_HOLD_MS=200 node --test \"test/*.test.js\""
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

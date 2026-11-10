@@ -1,0 +1,8 @@
+{
+  "name": "claude-desk-panel",
+  "private": true,
+  "scripts": {
+    "sim": "npm --prefix simulator run sim",
+    "test": "npm --prefix mac-service test && npm --prefix panel test && node --test \"nucbox/test/*.test.js\" &&npm --prefix simulator run smoke && device/test/provision.test.sh && device/test/panel-usb-mode.test.sh && device/test/panel-modeswitch.test.sh &&make -s -C device/panel-recorder test"
+  }
+}

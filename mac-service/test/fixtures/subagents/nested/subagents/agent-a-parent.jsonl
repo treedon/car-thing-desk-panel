@@ -1,0 +1,2 @@
+{"isSidechain": true, "type": "user", "message": {"role": "user", "content": "Do it"}, "timestamp": "2026-11-02T11:00:00.000Z"}
+{"isSidechain": true, "type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_kid", "name": "Agent", "input": {"description": "Child"}}]}, "timestamp": "2026-11-02T11:00:02.000Z"}

@@ -1,0 +1,13 @@
+{"type":"custom-title","customTitle":"Digest fixture"}
+{"type":"ai-title","aiTitle":"ignored"}
+{"type":"user","origin":{"kind":"human"},"message":{"role":"user","content":"Make the dial dimmer"},"timestamp":"2026-11-02T10:00:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"assistant","message":{"model":"claude-test-1","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"Done. The dial now dims in 5% steps. Next: tests."}]},"timestamp":"2026-11-02T10:02:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"system","subtype":"stop_hook_summary","timestamp":"2026-11-02T10:02:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"assistant","message":{"model":"claude-test-1","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"I also tidied the helper."}]},"timestamp":"2026-11-02T10:03:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"system","subtype":"stop_hook_summary","timestamp":"2026-11-02T10:03:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"user","origin":{"kind":"task-notification"},"message":{"role":"user","content":"<task-notification>Background build finished</task-notification>"},"timestamp":"2026-11-02T10:10:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"assistant","message":{"model":"claude-test-1","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"The background build passed."}]},"timestamp":"2026-11-02T10:11:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"system","subtype":"stop_hook_summary","timestamp":"2026-11-02T10:11:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"user","isCompactSummary":true,"message":{"role":"user","content":"This session is being continued from a previous conversation."},"timestamp":"2026-11-02T10:12:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"user","origin":{"kind":"human"},"message":{"role":"user","content":"Now add the tests"},"timestamp":"2026-11-02T10:20:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"assistant","message":{"model":"claude-test-1","role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"npm test"}}]},"timestamp":"2026-11-02T10:21:00.000Z","cwd":"/Users/dev/proj"}

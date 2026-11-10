@@ -1,0 +1,8 @@
+{"type":"user","origin":{"kind":"human"},"message":{"role":"user","content":"Tidy the config loader"},"timestamp":"2026-11-02T10:00:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"brand-new-record"}
+{"type":"assistant","message":{"content":[{"ty
+{"type":"assistant","message":{"model":"claude-test-1","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"Sidechain work."}]},"timestamp":"2026-11-02T10:00:00.000Z","cwd":"/Users/dev/proj","isSidechain":true}
+{"type":"user","isMeta":true,"message":{"role":"user","content":"META-SENTINEL"},"timestamp":"2026-11-02T10:00:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"user","message":{"role":"user","content":"[Request interrupted by user]"},"timestamp":"2026-11-02T10:00:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"assistant","message":{"model":"claude-test-1","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"Fine."}]},"timestamp":"2026-11-02T10:01:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"system","subtype":"stop_hook_summary","timestamp":"2026-11-02T10:01:00.000Z","cwd":"/Users/dev/proj"}

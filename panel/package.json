@@ -1,0 +1,19 @@
+{
+  "name": "claude-panel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The Car Thing desk panel web app (Chrome 69, 800x480)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "sprites": "node scripts/gen-sprites.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "devDependencies": {
+    "@vitejs/plugin-legacy": "^5.4.3",
+    "terser": "^5.36.0",
+    "vite": "^5.4.11",
+    "ws": "^8.22.1"
+  }
+}

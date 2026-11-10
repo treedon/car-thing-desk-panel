@@ -1,0 +1,18 @@
+{
+  "name": "claude-panel-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mac simulator for the Car Thing desk panel: faceplate, knob and buttons around the panel at 800x480",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "sim": "node scripts/run.js",
+    "smoke": "node scripts/smoke.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

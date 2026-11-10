@@ -1,0 +1,220 @@
+// Hardware input -> semantic actions, per the device contract:
+// dial turn = wheel deltaX (dead-zone |dx|<10, drop ticks <15ms apart),
+// dial press = Enter, back = Escape, preset 3 = deny on a card,
+// settings key m: tap = ambient toggle, hold 600ms = 'm-hold' (dictation, Task 11).
+// Touch taps hit [data-action] elements, and a touch drag scrolls whatever the
+// dial scrolls.
+
+import { createDrag } from './gesture.js';
+
+var handlers = {};   // action -> [fn]
+var lastTick = 0;
+
+export function onAction(action, fn) {
+  (handlers[action] = handlers[action] || []).push(fn);
+}
+
+// The screen's sleep gate (display.js). Every action asks it first, with
+// where it came from: 'knob' (the wheel and Enter), 'touch' (drags and taps)
+// or 'key' (the presets, the top button and Back). It returns false to drop
+// the action: a knob input that woke the screen, or anything else while dark.
+var gate = null;
+
+export function setGate(fn) { gate = fn; }
+
+function deliver(action, arg) {
+  var fns = handlers[action] || [];
+  for (var i = 0; i < fns.length; i++) fns[i](arg);
+}
+
+// Returns whether the action got through the gate.
+function fire(action, arg, source) {
+  if (gate && gate(action, source || 'key') === false) return false;
+  deliver(action, arg);
+  return true;
+}
+
+// The presets are page buttons; on a card, preset 3 (the queue's) is the
+// one context action: deny. Deny is the recoverable choice of the two, so it
+// is the one that gets a physical button — an accidental allow is not undoable.
+var KEYMAP = {
+  Enter: 'select',
+  Escape: 'back',
+  // The presets: 1 Tasks, 2 Agents, 3 Queue, 4 Home/Audio (shell.js decides).
+  '1': 'preset',
+  '2': 'preset',
+  '3': 'preset',
+  '4': 'preset',
+};
+
+// The settings key does two jobs, split by hold time like nocturne's power
+// menu: tap = ambient, hold 600ms = 'm-hold'. That forces ambient onto keyup
+// — a tap can't be told from the start of a hold until the key comes back up.
+var HOLD_MS = 600;
+var mTimer = null;
+var mHeld = false;
+var mHoldActed = false;   // the m-hold of this press got through the gate
+
+function clearHold() {
+  if (mTimer) { clearTimeout(mTimer); mTimer = null; }
+  mHeld = false;
+  mHoldActed = false;
+}
+
+window.addEventListener('keydown', function (e) {
+  if (e.key === 'm' || e.key === 'M') {
+    e.preventDefault();
+    if (e.repeat || mTimer) return;
+    mHeld = false;
+    mTimer = setTimeout(function () {
+      mTimer = null;
+      mHeld = true;
+      mHoldActed = fire('m-hold');
+    }, HOLD_MS);
+    return;
+  }
+  if (e.repeat) return;
+  var action = KEYMAP[e.key];
+  if (action) {
+    e.preventDefault();
+    fire(action, e.key, action === 'select' ? 'knob' : 'key');
+  }
+}, { capture: true });
+
+window.addEventListener('keyup', function (e) {
+  if (e.key !== 'm' && e.key !== 'M') return;
+  e.preventDefault();
+  var wasHeld = mHeld;
+  var holdActed = mHoldActed;
+  clearHold();
+  if (!wasHeld) fire('ambient');
+  // A hold that started talking always gets its release, even if the screen
+  // went dark in between, or the recording would never end. A hold the gate
+  // dropped gets none.
+  else if (holdActed) deliver('m-release');
+}, { capture: true });
+
+// a keyup lost to focus change must not strand a pending hold
+window.addEventListener('blur', clearHold);
+
+document.addEventListener('wheel', function (e) {
+  e.preventDefault();
+  var dx = e.deltaX;
+  if (Math.abs(dx) < 10) return;          // hardware dead-zone
+  var now = Date.now();
+  if (now - lastTick < 15) return;        // debounce spurious ticks
+  lastTick = now;
+  fire('dial', dx > 0 ? 1 : -1, 'knob');
+}, { passive: false });
+
+// ---- touch drag = dial ------------------------------------------------------
+// The screen is the only input the Car Thing has that the dial doesn't
+// duplicate, and every scrollable screen is already a dial-driven cursor. So a
+// drag is fed straight into 'dial' instead of each screen growing its own touch
+// handling: sessions, the queue and a question's options all scroll by finger
+// for free, and stay in step with the wheel.
+
+var drag = createDrag(function (dir) { fire('dial', dir, 'touch'); });
+
+function primaryPoint(e) {
+  if (e.touches) return e.touches.length === 1 ? e.touches[0] : null;
+  if (e.isPrimary === false) return null;
+  // buttons is 0 for a mouse moving with nothing held down; touch and pen
+  // report 1 while in contact.
+  if (e.pointerType === 'mouse' && e.type !== 'pointerdown' && !e.buttons) return null;
+  return e;
+}
+
+var captured = null;   // pointerId held by documentElement, or null
+
+// Each tick re-renders the screen, which deletes the element the finger came
+// down on. Chrome's implicit capture lives on that element, so without moving
+// the capture to a node that survives, the first tick ends the gesture with a
+// pointercancel and the drag dies after one step.
+//
+// This is claimed at the moment the gesture BECOMES a drag, never on the way
+// down. A captured pointer retargets the browser's synthesised click to the
+// capturing element, so capturing every press made every click arrive at
+// <html> with no [data-action] above it — and every tap on the device did
+// nothing at all. A tap never passes the slop, so it never captures, and its
+// click lands on the row the finger is actually on.
+function capture(e) {
+  if (captured !== null || e.pointerId === undefined) return;
+  if (!document.documentElement.setPointerCapture) return;
+  try {
+    document.documentElement.setPointerCapture(e.pointerId);
+    captured = e.pointerId;
+  } catch (err) {}
+}
+
+function release() {
+  if (captured === null) return;
+  try { document.documentElement.releasePointerCapture(captured); } catch (err) {}
+  captured = null;
+}
+
+function onDown(e) {
+  var p = primaryPoint(e);
+  if (!p) return drag.cancel();
+  release();
+  drag.start(p.clientX, p.clientY, Date.now());
+}
+
+function onMove(e) {
+  var p = primaryPoint(e);
+  if (!p) return;
+  // Once the drag owns the finger, stop the browser doing anything else with
+  // it — text selection, rubber-banding, or a synthesised scroll.
+  if (drag.move(p.clientX, p.clientY, Date.now())) {
+    capture(e);
+    if (e.cancelable) e.preventDefault();
+  }
+}
+
+function onUp() { release(); drag.end(Date.now()); }
+
+if (window.PointerEvent) {
+  document.addEventListener('pointerdown', onDown, { passive: false });
+  document.addEventListener('pointermove', onMove, { passive: false });
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', function () { release(); drag.cancel(); });
+} else {
+  // Fallback for a browser without pointer events. Touch events can't be
+  // recaptured the way the branch above does, so a re-render under the finger
+  // can cut a drag short; the device's Chromium has PointerEvent, so this path
+  // is a safety net rather than the one that runs.
+  document.addEventListener('touchstart', onDown, { passive: false });
+  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('touchend', onUp);
+  document.addEventListener('touchcancel', function () { drag.cancel(); });
+  document.addEventListener('mousedown', onDown);
+  document.addEventListener('mousemove', onMove, { passive: false });
+  document.addEventListener('mouseup', onUp);
+}
+
+// A scroll ends with the finger somewhere it never meant to press, so the click
+// the browser synthesises from it must not open whatever it landed on. Runs in
+// the capture phase to beat the tap handler below.
+document.addEventListener('click', function (e) {
+  if (!drag.scrolled()) return;
+  e.stopPropagation();
+  e.preventDefault();
+}, { capture: true });
+
+// touch / click on [data-action] elements
+document.addEventListener('click', function (e) {
+  // A tap on a dark screen does nothing at all.
+  if (gate && gate('tap', 'touch') === false) {
+    e.stopPropagation();
+    e.preventDefault();
+    return;
+  }
+  var el = e.target;
+  while (el && el !== document.body) {
+    if (el.getAttribute && el.getAttribute('data-action')) {
+      fire('tap', { action: el.getAttribute('data-action'), id: el.getAttribute('data-id') }, 'touch');
+      return;
+    }
+    el = el.parentNode;
+  }
+});

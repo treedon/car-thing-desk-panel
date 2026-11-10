@@ -1,0 +1,128 @@
+import os from 'node:os';
+import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export const DAEMON_ROOT = path.resolve(__dirname, '..');
+export const PROJECT_ROOT = path.resolve(DAEMON_ROOT, '..');
+
+export const PORT = Number(process.env.CLAUDE_THING_PORT) || 8790;
+// 0.0.0.0 so the Car Thing can reach /ws over Wi-Fi; lan-auth.js keeps every
+// other route loopback-only. CLAUDE_PANEL_BIND=127.0.0.1 keeps it off the LAN.
+export const HOST = process.env.CLAUDE_PANEL_BIND || '0.0.0.0';
+// Holds the LAN token the panel must present on /ws (mode 0600).
+// Browser pages allowed to open the loopback socket without the token: the
+// simulator on this Mac. CLAUDE_PANEL_ORIGINS adds more (comma-separated).
+const SIM_PORT = Number(process.env.SIM_PORT) || 8091;
+export const ALLOWED_ORIGINS = [`http://127.0.0.1:${SIM_PORT}`, `http://localhost:${SIM_PORT}`]
+  .concat((process.env.CLAUDE_PANEL_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean));
+export const TOKEN_DIR = process.env.CLAUDE_PANEL_CONFIG_DIR || path.join(os.homedir(), '.config', 'claude-panel');
+
+export const DAEMON_VERSION = JSON.parse(
+  fs.readFileSync(path.join(DAEMON_ROOT, 'package.json'), 'utf8')
+).version;
+
+export const WEBPAGE_DIST = path.join(PROJECT_ROOT, 'webpage', 'dist');
+// log.js empties <LOG_DIR>/daemon.log each time it is imported, and in the checkout that file is the live
+// service's log. CLAUDE_THING_LOG_DIR moves it, so a test or a second instance leaves the real one alone.
+export const LOG_DIR = process.env.CLAUDE_THING_LOG_DIR || path.join(DAEMON_ROOT, 'logs');
+// CLAUDE_THING_PID_FILE moves it, so a second instance (a test, the latency script) leaves the real one alone.
+export const PID_FILE = process.env.CLAUDE_THING_PID_FILE || path.join(DAEMON_ROOT, '.daemon.pid');
+// Daemon state that outlives the process (see persist.js). Overridable so tests
+// never touch the real one.
+export const STATE_DIR = process.env.CLAUDE_THING_STATE_DIR || path.join(DAEMON_ROOT, '.state');
+
+export const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+export const CLAUDE_SETTINGS = path.join(CLAUDE_DIR, 'settings.json');
+export const CLAUDE_PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
+
+// Permission timing: the service answers "ask" at HOLD_MS if nobody responded,
+// and Claude Code's own prompt takes over. A held session is blocked, so the
+// hold is short; with no panel connected nothing is held at all. The installed
+// hook timeout must exceed this, or Claude Code gives up first.
+export const DEFAULT_PERMISSION_HOLD_MS = 20_000;
+export const PERMISSION_HOLD_MS = Number(process.env.CLAUDE_THING_HOLD_MS ?? DEFAULT_PERMISSION_HOLD_MS);
+export const HOOK_TIMEOUT_S = 600;
+
+// Snapshots are unbounded — the device grid scrolls sideways through however
+// many sessions exist. A client on a constrained transport can still ask for a
+// slice via claude.sessions.list {limit}.
+export const SESSION_CAP = 0;
+// The Bluetooth relay cannot split a *synchronous* response across its 2000-byte
+// chunks (carthing-knowledge/daemon.md), so a sessions.list response must fit
+// one chunk: 2000 minus ~160 of response envelope + snapshot fields, over a
+// worst-case ~355-byte SessionSummary (measured by chunk-fit.test.js), is four
+// sessions. Relay-role clients that forget to pass a limit get this cap instead
+// of a response that silently never arrives; the full grid follows as a chunked
+// async snapshot push.
+export const BT_SAFE_SESSION_LIMIT = 4;
+export const SNAPSHOT_DEBOUNCE_MS = 500;
+// Detail events are per-session and fire on every store write. A streaming
+// transcript writes several times a second, and every write used to go out as
+// its own claude.session.update — the device full-repaints per frame, so N busy
+// sessions multiplied into a render flood that froze the UI. Per-session
+// trailing debounce: the latest state still arrives within a blink, the flood
+// does not. Ended sessions bypass this — that farewell must not lose a race
+// with the record's deletion.
+export const DETAIL_DEBOUNCE_MS = 200;
+// A snapshot whose content hasn't changed still used to go out every 5s (the
+// state re-derive tick), repainting every connected screen overnight. Unchanged
+// snapshots are skipped, but not forever: one still goes out at this interval
+// so the device's clock-skew correction (serverNowMs) stays fresh.
+export const SNAPSHOT_HEARTBEAT_MS = 30_000;
+export const BUSY_WINDOW_MS = 10_000;    // activity within this = busy
+// A finished turn is worth glancing at, and twenty seconds was shorter than the
+// time it takes to look up at the device. A minute is long enough to notice.
+export const CELEBRATE_MS = 60_000;      // celebrate decays to idle after this
+export const POLL_INTERVAL_MS = 3_000;   // claude agents --json poll
+// One listing is a claim, not a verdict. The registry is rewritten by every
+// claude process on the machine — including the daemon's own usage and poll
+// invocations — so a single read can catch it mid-write and come back empty or
+// partial. Retiring on one such read wiped the whole grid for a poll interval.
+// A session must be missing from this many consecutive good polls before it is
+// retired (cost: a genuinely-gone session lingers one extra interval)...
+export const RETIRE_AFTER_MISSED_POLLS = 2;
+// ...and a listing that claims *nothing at all* is alive while the store says
+// otherwise is suspect enough to ignore entirely this many times in a row
+// before its absences start counting.
+export const EMPTY_LISTING_GRACE_POLLS = 1;
+// The registry's "working" verdict is the only thing that stays true while the
+// model thinks and nothing is being written. Trust it for a few poll intervals
+// so one dropped poll doesn't blink a working session to idle.
+export const AGENT_ACTIVE_TTL_MS = 3 * POLL_INTERVAL_MS;
+// A turn normally ends at the Stop hook. If that never arrives — session killed
+// mid-thought, hooks not installed — this stops the tile from claiming to work
+// forever. Long enough not to cut off a genuinely slow turn.
+export const THINKING_TTL_MS = 10 * 60_000;
+// Ended sessions are dropped the instant they end — no grace period. A tile you
+// can't act on is noise, and a lingering headstone reads as a live session.
+
+export const MOCK_SESSIONS = process.env.CLAUDE_THING_MOCK === '1';
+
+// Usage screen: real plan figures read from `claude -p "/usage"` once a minute.
+export const USAGE_REFRESH_MS = 60_000;
+
+// The agent digest (digest/index.js): what the last day of sessions did, read from their transcripts.
+// CLAUDE_PANEL_DIGEST=0 turns it off. It never runs on Windows (the NucBox's service) in this milestone,
+// whatever CLAUDE_PANEL_DIGEST says: nothing consumes a NucBox digest (the panel takes it from the Mac
+// only), Windows transcript paths and replacing a file that exists are untested there, and the state
+// file's mode 0600 means nothing on Windows, so keeping transcript facts private would rest on folder ACLs.
+export function digestEnabled(env = process.env, platform = process.platform) {
+  return env.CLAUDE_PANEL_DIGEST !== '0' && platform !== 'win32';
+}
+export const DIGEST_ENABLED = digestEnabled();
+// Whether the digest keeps its state in STATE_DIR (digest.json). The live service always does. The demo (mock
+// sessions) does only when CLAUDE_THING_STATE_DIR names a folder: otherwise STATE_DIR is the checkout's .state/, the
+// live service's, and the demo's records would replace the live ones there (and a restarted demo, which rewrites its
+// transcripts at the same sizes, would keep the facts it read the last time).
+export function digestPersists(env = process.env, mock = MOCK_SESSIONS) {
+  return !mock || (typeof env.CLAUDE_THING_STATE_DIR === 'string' && env.CLAUDE_THING_STATE_DIR !== '');
+}
+export const DIGEST_WINDOW_HOURS = 24;        // cards and totals cover this much; the state is pruned to it
+export const DIGEST_MAX_CARDS = 20;
+export const DIGEST_EMIT_DEBOUNCE_MS = 2_000; // the first change after an update sends the next this much later
+export const DIGEST_SAVE_INTERVAL_MS = 10_000; // .state/digest.json is written at most this often
+// A Stop is read this long after it is heard, so the stop_hook_summary that closes the turn lands first.
+export const DIGEST_READ_DELAY_MS = 1_500;

@@ -1,0 +1,15 @@
+[Unit]
+Description=Desk panel: USB port role (Back at power-on or tethered: USB networking)
+After=superbird-usb-gadget.service systemd-udev-trigger.service
+Before=chromium-kiosk.service
+# The tethered flag is in the provisioned /opt/panel (panel-settings).
+Requires=opt-overlay@panel.service
+After=opt-overlay@panel.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/panel-usb-mode
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+# Bounded parallelism for a 16 GB Docker VM (from yocto-superbird's
+# kas/macos-lowmem.yml): Chromium's link steps run out of memory otherwise.
+header:
+  version: 18
+
+local_conf_header:
+  lowmem: |
+    BB_NUMBER_THREADS = "8"
+    PARALLEL_MAKE = "-j 8"

@@ -1,0 +1,20 @@
+node_modules/
+dist/
+logs/
+reference/
+spikes/
+simulator/.cache/
+.superpowers/
+.DS_Store
+device/panel-recorder/test/run
+device/panel-recorder/panel-recorder
+/device/build/
+/sources/
+/.kas/
+
+# Secrets never belong here: settings live in ~/.config/claude-panel/.
+.env
+.env.*
+*.pem
+*.key
+wifi.conf

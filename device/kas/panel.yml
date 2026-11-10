@@ -1,0 +1,28 @@
+# The desk panel's Car Thing image: yocto-superbird's kiosk, plus meta-panel
+# (Wi-Fi, the panel served from the device, its recorder, host mode).
+header:
+  version: 18
+  includes:
+    - repo: yocto-superbird
+      file: kas/superbird.yml
+
+distro: superbird-kiosk
+
+target:
+  - superbird-kiosk-dev-image
+
+repos:
+  yocto-superbird:
+    url: https://github.com/JoeyEamigh/yocto-superbird.git
+    branch: main
+    # Pinned so task signatures match the shared sstate cache; bump deliberately.
+    commit: a3b941e17ad3fc06ed5b297f2400468d34ec6dad
+    path: sources/yocto-superbird
+    layers:
+      meta-superbird:
+      examples/meta-superbird-kiosk-example:
+
+  carthing-panel:
+    path: .
+    layers:
+      device/meta-panel:

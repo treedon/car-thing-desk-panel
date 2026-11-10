@@ -1,0 +1,6 @@
+# The TP-Link Archer TX10UB Nano starts as a Realtek "driver disk" (0bda:1a2b):
+# one mass-storage interface and no Wi-Fi. A standard eject turns it into the
+# Wi-Fi adapter (3625:010b), which the rtw89 driver then claims. It falls back to
+# disk mode whenever it loses power, so this runs on every plug-in and boot.
+# The config for this ID is /etc/usb_modeswitch.d/0bda:1a2b.
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0bda", ATTR{idProduct}=="1a2b", RUN+="usb_modeswitch '/%k'"

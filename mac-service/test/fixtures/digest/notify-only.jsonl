@@ -1,0 +1,3 @@
+{"type":"user","origin":{"kind":"task-notification"},"message":{"role":"user","content":"<task-notification>Build finished</task-notification>"},"timestamp":"2026-11-02T10:00:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"assistant","message":{"model":"claude-test-1","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"Built."}]},"timestamp":"2026-11-02T10:01:00.000Z","cwd":"/Users/dev/proj"}
+{"type":"system","subtype":"stop_hook_summary","timestamp":"2026-11-02T10:01:00.000Z","cwd":"/Users/dev/proj"}

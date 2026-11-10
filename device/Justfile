@@ -1,0 +1,45 @@
+# Builds the desk panel's Car Thing image with kas in Docker (Colima or Docker
+# Desktop on macOS). Run from the repo root: just -f device/Justfile build
+set working-directory := ".."
+
+# kas-container calls GNU realpath -e; macOS's BSD realpath has no -e.
+export PATH := "/opt/homebrew/opt/coreutils/libexec/gnubin:" + env_var('PATH')
+
+build_vol := "carthing-panel-yocto"
+# bitbake needs a case-sensitive filesystem with POSIX locks: on macOS the
+# build tree lives in a Docker volume, not a bind-mounted folder.
+runtime_args := "-e KAS_DOCKER_ROOTLESS=1 -e KAS_BUILD_DIR=/build/build -v " + build_vol + ":/build"
+deploy := "device/build/deploy"
+
+build:
+  npm --prefix panel run build
+  docker volume inspect {{build_vol}} >/dev/null 2>&1 || docker volume create {{build_vol}} >/dev/null
+  KAS_CONTAINER_ENGINE=docker kas-container --runtime-args "{{runtime_args}}" build device/kas/panel.yml:device/kas/lowmem.yml
+  just -f device/Justfile pull-deploy
+
+shell:
+  KAS_CONTAINER_ENGINE=docker kas-container --runtime-args "{{runtime_args}}" shell device/kas/panel.yml
+
+# Copy the latest flashable image out of the build volume onto the Mac.
+pull-deploy:
+  mkdir -p {{deploy}}
+  docker run --rm -v {{build_vol}}:/build -v "$PWD/{{deploy}}":/out alpine sh -c 'cp -L /build/build/tmp/deploy/images/superbird/superbird-kiosk-dev-image-superbird-flashthing.zip /out/; ls -la /out'
+
+# The same image as an over-the-air update bundle (.swu), for `ota`.
+swu:
+  npm --prefix panel run build
+  docker volume inspect {{build_vol}} >/dev/null 2>&1 || docker volume create {{build_vol}} >/dev/null
+  KAS_CONTAINER_ENGINE=docker kas-container --runtime-args "{{runtime_args}}" build --target superbird-kiosk-update-dev device/kas/panel.yml:device/kas/lowmem.yml
+  mkdir -p {{deploy}}
+  docker run --rm -v {{build_vol}}:/build -v "$PWD/{{deploy}}":/out alpine sh -c 'cp -L /build/build/tmp/deploy/images/superbird/superbird-kiosk-update-dev-superbird.swu /out/; ls -la /out'
+
+# Update a Car Thing over Wi-Fi from that bundle: no cable, and /opt/panel stays.
+ota host:
+  device/scripts/ota.sh {{host}} {{deploy}}/superbird-kiosk-update-dev-superbird.swu
+
+flash image="superbird-kiosk-dev-image":
+  flashthing-cli {{deploy}}/{{image}}-superbird-flashthing.zip
+
+# Disk the build volume uses inside the Docker VM.
+usage:
+  docker run --rm -v {{build_vol}}:/build alpine du -sh /build
